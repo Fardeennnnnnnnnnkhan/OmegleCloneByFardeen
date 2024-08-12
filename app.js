@@ -63,4 +63,4 @@ const indexRouter = require('./routes/index');
 
 app.use("/", indexRouter);
 
-server.listen(3000);
+server.listen(process.enc.PORT || 3000);
