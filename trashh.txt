@@ -1,0 +1,259 @@
+  <!-- <script>
+      let socket = io();
+      let chatform = document.querySelector("#chatform");
+      let messagebox = document.querySelector("#messagebox");
+      let room;
+
+      socket.emit("joinroom");
+
+      socket.on("joined", function (roomname) {
+        room = roomname;
+        document.querySelector(".nobody").classList.add("hidden");
+        console.log("Joined");
+      });
+
+      chatform.addEventListener("submit", function (event) {
+        event.preventDefault();
+
+        socket.emit("message", { room: room, message: messagebox.value });
+        attachMessage(messagebox.value);
+
+        messagebox.value = "";
+      });
+      socket.on("message", function (message) {
+        receiveMessage(message);
+      });
+
+      function attachMessage(message) {
+        const userMessageContainer = document.createElement("div");
+        userMessageContainer.classList.add("flex", "my-2", "justify-end");
+
+        const userMessageDiv = document.createElement("div");
+        userMessageDiv.classList.add(
+          "bg-blue-500",
+          "text-white",
+          "p-3",
+          "rounded-lg",
+          "max-w-xs"
+        );
+
+        const userMessageText = document.createElement("p");
+        userMessageText.textContent = message;
+
+        userMessageDiv.appendChild(userMessageText);
+
+        userMessageContainer.appendChild(userMessageDiv);
+
+        document
+          .getElementById("message-container")
+          .appendChild(userMessageContainer);
+
+        document.querySelector("#message-container").scrollTop =
+          document.querySelector("#message-container").scrollHeight;
+      }
+
+      function receiveMessage(message) {
+        const messageContainer = document.createElement("div");
+        messageContainer.classList.add("flex", "my-2", "justify-start");
+
+        const messageDiv = document.createElement("div");
+        messageDiv.classList.add(
+          "bg-gray-300",
+          "text-gray-800",
+          "p-3",
+          "rounded-lg",
+          "max-w-xs"
+        );
+
+        const messageText = document.createElement("p");
+        messageText.textContent = message;
+
+        messageDiv.appendChild(messageText);
+
+        messageContainer.appendChild(messageDiv);
+
+        document
+          .getElementById("message-container")
+          .appendChild(messageContainer);
+        document.querySelector("#message-container").scrollTop =
+          document.querySelector("#message-container").scrollHeight;
+      }
+
+      // Webrtc Starts
+
+      let locaStreams;
+      let remoteStream;
+      let peerConnection;
+      let inCall = false;
+      const rtcSettings = {
+        iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+      };
+      const initialize = async () => {
+        socket.on("signalingMessage" , handlingSignalingMessage)
+        try {
+          locaStreams = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+            video: true,
+          });
+        } catch {
+          console.log("Rejected By Browser");
+        }
+        document.querySelector("#localVideo").srcObject = locaStreams;
+        document.querySelector("#localVideo").style.display = "block";
+
+        initiateOffer();
+        inCall = true;
+      };
+
+      const initiateOffer = async () => {
+        await createPeerConnection();
+        try {
+          const offer = await peerConnection.createOffer();
+          await peerConnection.setLocalDescription(offer);
+          socket.emit("signalingMessage", {
+            room,
+            message: JSON.stringify({
+              type: "offer",
+              offer,
+            }),
+          });
+        } catch (err) {
+          console.log("error in creating offer" + err);
+        }
+      };
+
+      const createPeerConnection = () => {
+        peerConnection = new RTCPeerConnection(rtcSettings);
+
+        remoteStream = new MediaStream();
+
+        document.querySelector("#remoteVideo").srcObject = remoteStream;
+        document.querySelector("#remoteVideo").style.display = "block";
+        document.querySelector("#localVideo").classList.add("smallFrame");
+
+        locaStreams.getTracks().forEach((track) => {
+          peerConnection.addTrack(track, locaStreams);
+        });
+
+        peerConnection.ontrack = (event) => {
+          event.streams[0].getTracks().forEach((track) => {
+            remoteStream.addTrack(track);
+          });
+        };
+
+        peerConnection.onicecandidate = (event) => {
+          if (event.candidate) {
+            console.log("Sending Ice Candidate ");
+          }
+
+          socket.emit("signalingMessage", {
+            room,
+            message: JSON.stringify({
+              type: "candidate",
+              candidate: event.candidate,
+            }),
+          });
+        };
+
+        peerConnection.onconnectionstatechange = () => {
+          console.log(
+            "connection state changed",
+            peerConnection.connectionState
+          );
+        };
+      };
+  
+  const handlingSignalingMessage  = async (message)=>{
+       const { type , offer , answer , candidate} = JSON.parse(message);
+       if(type === offer) handleOffer(offer)
+       if(type === answer) handleAnswer(answer)
+       if(type === candidate && peerConnection) {
+        try{
+                await peerConnection.addIceCandidate(candidate)
+        }catch(err){
+                    console.log(err)
+        }
+       }
+       if(type === "hangup") {
+        hangup()
+       }
+  }
+
+  const handleOffer = async (offer)=>{
+      await createPeerConnection()
+    try{
+           await  peerConnection.setRemoteDescription(offer)
+           let answer  = await peerConnection.createAnswer()
+           await  peerConnection.setLocalDescription(answer)
+           socket.emit("signalingMessage" , {room  , message : JSON.stringify({
+            type : "answer",
+            answer
+           })})
+    } catch(err){
+            console.log("Failed to Handle Answer")
+    }
+  }
+  const handleAnswer = async (answer)=>{
+    try{
+            await peerConnection.setRemoteDescription(answer)
+    }catch(err){
+        console.log("Failed to Handle answer")
+    }
+      
+  }
+
+
+  document.querySelector("#video-call-btn")
+                .addEventListener("click", function () {
+                    console.log("video Call Clicked")
+                    socket.emit("startVideoCall", { room })
+                })
+
+            socket.on("incomingCall", function () {
+                console.log("hey");
+                document.querySelector("#incoming-call").classList.remove("hidden");
+            })
+
+            socket.on("callAccepted" , function(){
+    initialize();
+    document.querySelector(".videoblock").classList.remove("hidden")
+
+})
+
+            document.querySelector("#accept-call").addEventListener("click" , function(){
+                document.querySelector("#incoming-call").classList.add("hidden");
+                initialize();
+                document.querySelector(".videoblock").classList.remove("hidden")
+                        socket.on("acceptCall" , {room})
+            })
+
+            document.querySelector("#reject-call").addEventListener("click" , function(){
+                document.querySelector("#incoming-call").classList.add("hidden");
+                socket.on("rejectCall" , {room})
+            })
+
+            socket.on("callRejected" , function(){
+    alert("Call Rejected By Another User")
+
+})
+document.querySelector("#hangup").addEventListener("click" , function(){
+           hangup()
+            })
+
+            const hangup = ()=>{
+                if(peerConnection){
+                peerConnection.close();
+                peerConnection = null;
+                
+                locaStreams.getTracks().forEach(track => track.stop())
+    document.querySelector(".videoblock").classList.remove("hidden")
+    socket.emit("signalingMessage" , {room , message : JSON.stringify({
+        type: "hangup",
+    })})
+
+    inCall = false;
+
+            }
+            }
+
+  </script> -->
