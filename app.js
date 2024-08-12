@@ -59,7 +59,7 @@ app.use(express.json())
 app.use(express.urlencoded({extended : true}))
 app.use(express.static(path.join(__dirname , "public")))
 
-const indexRouter = require('./routes/index');
+const indexRouter = require('./routes');
 
 app.use("/" , indexRouter);
 
